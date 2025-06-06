@@ -7,6 +7,7 @@ interface TransferProgressDialogProps {
     progress: {
         status: 'in_progress' | 'completed' | 'failed';
         total: number;
+        completed: number;
     } | null;
     sourceCollectionName: string;
     targetCollectionName: string;
@@ -74,7 +75,7 @@ export function TransferProgressDialog({
             case 'in_progress':
                 return `Transferring companies from ${sourceCollectionName} to ${targetCollectionName}${dots}`;
             case 'completed':
-                return `Successfully transferred companies from ${sourceCollectionName} to ${targetCollectionName}`;
+                return `Successfully transferred ${progress.completed} out of ${progress.total} companies from ${sourceCollectionName} to ${targetCollectionName}`;
             case 'failed':
                 return `Failed to transfer companies from ${sourceCollectionName} to ${targetCollectionName}`;
             default:

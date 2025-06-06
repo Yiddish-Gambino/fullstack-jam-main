@@ -1,4 +1,4 @@
-import { Button, Stack } from "@mui/material";
+import { Button, Stack, Typography } from "@mui/material";
 import { DataGrid, GridRowSelectionModel } from "@mui/x-data-grid";
 import { useEffect, useState } from "react";
 import { getCollectionsById, ICompany, ICollection } from "../utils/jam-api";
@@ -90,6 +90,9 @@ const CompanyTable = ({ selectedCollectionId, collections }: CompanyTableProps) 
 
     return (
         <div style={{ height: 600, width: "100%" }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+                This is a list of all of the Companies in the Database
+            </Typography>
             <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
                 <Button
                     variant="contained"
