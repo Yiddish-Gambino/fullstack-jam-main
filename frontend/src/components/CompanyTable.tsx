@@ -10,6 +10,7 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
   const [pageSize, setPageSize] = useState(25);
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
   const [isSelectingAll, setIsSelectingAll] = useState(false);
+  const [allCompanyIds, setAllCompanyIds] = useState<number[]>([]);
 
   useEffect(() => {
     getCollectionsById(props.selectedCollectionId, offset, pageSize).then(
@@ -22,20 +23,55 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
 
   useEffect(() => {
     setOffset(0);
+    setSelectedRows([]);
+    setAllCompanyIds([]);
   }, [props.selectedCollectionId]);
 
   const handleSelectAll = async () => {
+    if (allCompanyIds.length > 0) {
+      // If all are selected, deselect all
+      setSelectedRows([]);
+      setAllCompanyIds([]);
+      return;
+    }
+
     setIsSelectingAll(true);
     try {
       // Fetch all companies in the collection
       const allCompanies = await getCollectionsById(props.selectedCollectionId, 0, total || 0);
-      setSelectedRows(allCompanies.companies.map(company => company.id));
+      const allIds = allCompanies.companies.map(company => company.id);
+      setAllCompanyIds(allIds);
+      setSelectedRows(allIds);
     } catch (error) {
       console.error('Error selecting all companies:', error);
     } finally {
       setIsSelectingAll(false);
     }
   };
+
+  const handleSelectionChange = async (newSelection: GridRowSelectionModel) => {
+    if (allCompanyIds.length > 0) {
+      // If we have all companies selected, allow deselection of specific rows
+      const deselectedIds = allCompanyIds.filter(id => !newSelection.includes(id));
+      if (deselectedIds.length > 0) {
+        // If any companies were deselected, clear the "all selected" state
+        setAllCompanyIds([]);
+        setSelectedRows(newSelection);
+      }
+    } else {
+      setSelectedRows(newSelection);
+      // Check if all companies are now selected
+      if (newSelection.length === total) {
+        const allCompanies = await getCollectionsById(props.selectedCollectionId, 0, total || 0);
+        const allIds = allCompanies.companies.map(company => company.id);
+        if (allIds.every(id => newSelection.includes(id))) {
+          setAllCompanyIds(allIds);
+        }
+      }
+    }
+  };
+
+  const isAllSelected = allCompanyIds.length > 0;
 
   return (
     <div style={{ height: 600, width: "100%" }}>
@@ -45,7 +81,7 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
           onClick={handleSelectAll}
           disabled={isSelectingAll}
         >
-          {isSelectingAll ? 'Selecting...' : 'Select All'}
+          {isSelectingAll ? 'Selecting...' : isAllSelected ? 'Deselect All' : 'Select All'}
         </Button>
       </Stack>
       <DataGrid
@@ -69,9 +105,7 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
           setPageSize(newMeta.pageSize);
           setOffset(newMeta.page * newMeta.pageSize);
         }}
-        onRowSelectionModelChange={(newSelection) => {
-          setSelectedRows(newSelection);
-        }}
+        onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
       />
     </div>
