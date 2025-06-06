@@ -73,7 +73,11 @@ export function TransferProgressDialog({
 
         switch (progress.status) {
             case 'in_progress':
-                return `Transferring companies from ${sourceCollectionName} to ${targetCollectionName}${dots}`;
+                if (sourceCollectionName === 'My List') {
+                  return `Transferring companies from ${sourceCollectionName} to ${targetCollectionName}${dots}`;
+                } else {
+                  return `Removing companies from ${sourceCollectionName}${dots}`;
+                }
             case 'completed':
                 return `Successfully transferred ${progress.completed} out of ${progress.total} companies from ${sourceCollectionName} to ${targetCollectionName}`;
             case 'failed':

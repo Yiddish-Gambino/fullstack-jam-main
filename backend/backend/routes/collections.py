@@ -146,7 +146,12 @@ async def transfer_companies(
                     logger.warning(f"Company {company_id} not found in source collection")
                     continue
 
-                
+                # If source and target are the same, just delete the association (removing from collection)
+                if request.sourceCollectionId == request.targetCollectionId:
+                    db.delete(source_association)
+                    db.commit()
+                    completed += 1
+                    continue
 
                 # For other collections, handle normal transfer
                 # Check if company already exists in target collection
