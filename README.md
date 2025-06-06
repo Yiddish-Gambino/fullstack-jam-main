@@ -18,4 +18,4 @@ The biggest tradeoff I made was choosing simplicity over real-time updates. Whil
 
 Looking ahead, I'd love to add a proper progress bar and make the transfers asynchronous. For the progress bar, we could create a new component that shows both the percentage complete and estimated time remaining. Making the transfers asynchronous would involve setting up a task queue system (maybe Celery) and building out a job management interface. This would let us handle multiple transfers simultaneously and add features like pause/resume and transfer scheduling.
 
-Overall, I focused on getting a solid foundation in place that we can build upon. The current implementation is reliable and user-friendly, but there's plenty of room for enhancement as our needs grow.
+I'd also love to improve the overall UI to make it more user friendly. I'd consider adding a Heart next to the Liked Companies rather than a true/false, and a symbol for ignored companies as well (like a red circle with a slash in it).
