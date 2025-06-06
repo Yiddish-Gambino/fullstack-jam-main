@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, text
+from sqlalchemy import func, text, insert
 from sqlalchemy.orm import Session
 
 from backend.db import database
@@ -67,16 +67,23 @@ def get_company_collection_by_id(
     limit: int = Query(10, description="The number of items to fetch"),
     db: Session = Depends(database.get_db),
 ):
-    query = (
-        db.query(database.CompanyCollectionAssociation, database.Company)
-        .join(database.Company)
+    # First get total count
+    total_count = (
+        db.query(database.CompanyCollectionAssociation)
         .filter(database.CompanyCollectionAssociation.collection_id == collection_id)
+        .count()
     )
 
-    total_count = query.with_entities(func.count()).scalar()
+    # Then get paginated companies
+    query = (
+        db.query(database.CompanyCollectionAssociation, database.Company)
+        .join(database.Company, database.Company.id == database.CompanyCollectionAssociation.company_id)
+        .filter(database.CompanyCollectionAssociation.collection_id == collection_id)
+        .offset(offset)
+        .limit(limit)
+    )
 
-    results = query.offset(offset).limit(limit).all()
-    companies = fetch_companies_with_liked(db, [company.id for _, company in results])
+    companies = fetch_companies_with_liked(db, [company.id for _, company in query])
 
     return CompanyCollectionOutput(
         id=collection_id,
@@ -115,7 +122,20 @@ def process_transfer(
                 .first()
             )
 
+            # Check if company exists in target collection
+            target_association = (
+                db.query(database.CompanyCollectionAssociation)
+                .filter(database.CompanyCollectionAssociation.company_id == company_id)
+                .filter(database.CompanyCollectionAssociation.collection_id == target_collection_id)
+                .first()
+            )
+
+            if target_association:
+                logger.info(f"Company {company_id} already exists in target collection")
+                continue
+
             logger.info(f"Source association: {source_association}")
+            print(f"Source association: {source_association}")
 
             if source_association:
                 logger.info(f"Company {company_id} exists in source collection")
@@ -126,8 +146,10 @@ def process_transfer(
                 )
                 db.add(new_association)
 
+                if source_association.collection_id != db.query(database.CompanyCollection).filter(database.CompanyCollection.collection_name == "My List").first().id:
                 # Remove from source collection
-                db.delete(source_association)
+                    db.delete(source_association)
+                
                 db.commit()
 
             completed += 1
@@ -147,21 +169,16 @@ async def transfer_companies(
     db: Session = Depends(database.get_db)
 ):
     try:
-        logger.info(f"Starting transfer from {request.sourceCollectionId} to {request.targetCollectionId}")
-        logger.info(f"Company IDs to transfer: {request.companyIds}")
-        
         # Get source and target collections
-        source_collection = db.query(database.CompanyCollection).filter(database.CompanyCollection.id == request.sourceCollectionId).first()
-        target_collection = db.query(database.CompanyCollection).filter(database.CompanyCollection.id == request.targetCollectionId).first()
+        source_collection = db.query(database.CompanyCollection).filter(
+            database.CompanyCollection.id == request.sourceCollectionId
+        ).first()
+        target_collection = db.query(database.CompanyCollection).filter(
+            database.CompanyCollection.id == request.targetCollectionId
+        ).first()
         
         if not source_collection or not target_collection:
             raise HTTPException(status_code=404, detail="Source or target collection not found")
-        
-        logger.info(f"Source collection: {source_collection.collection_name}")
-        logger.info(f"Target collection: {target_collection.collection_name}")
-        
-        # Check if we're transferring from Liked Companies List
-        is_from_liked_list = source_collection.collection_name == "Liked Companies List"
         
         # Start transaction
         transfer_id = str(uuid.uuid4())
@@ -174,39 +191,56 @@ async def transfer_companies(
         )
         db.add(transfer)
         db.commit()
+
+        # Initialize transfer progress in memory
+        transfer_progress[transfer_id] = {
+            "status": "in_progress",
+            "completed": 0,
+            "total": len(request.companyIds)
+        }
         
         # Process each company
         completed = 0
         for company_id in request.companyIds:
             try:
-                # Get the company from source collection
-                company = db.query(database.Company).filter(
-                    database.Company.id == company_id,
-                    database.Company.collection_id == request.sourceCollectionId
+                # Get the association from source collection
+                source_association = db.query(database.CompanyCollectionAssociation).filter(
+                    database.CompanyCollectionAssociation.company_id == company_id,
+                    database.CompanyCollectionAssociation.collection_id == request.sourceCollectionId
                 ).first()
+
+                if not source_association:
+                    logger.warning(f"Company {company_id} not found in source collection")
+                    continue
+
+                # Check if company already exists in target collection
+                target_association = db.query(database.CompanyCollectionAssociation).filter(
+                    database.CompanyCollectionAssociation.company_id == company_id,
+                    database.CompanyCollectionAssociation.collection_id == request.targetCollectionId
+                ).first()
+
+                # Only delete from source if it's not the My List
+                if source_collection.collection_name != "My List":
+                    db.delete(source_association)
+
+                if target_association:
+                    logger.info(f"Company {company_id} already exists in target collection")
+                    continue
+
+                # Create new association in target collection
+                new_association = database.CompanyCollectionAssociation(
+                    company_id=company_id,
+                    collection_id=request.targetCollectionId
+                )
+                db.add(new_association)
                 
-                if company:
-                    # Create new company in target collection
-                    new_company = database.Company(
-                        id=company.id,
-                        collection_id=request.targetCollectionId,
-                        name=company.name,
-                        description=company.description,
-                        website=company.website,
-                        linkedin=company.linkedin,
-                        twitter=company.twitter,
-                        crunchbase=company.crunchbase,
-                        liked=False if is_from_liked_list else company.liked  # Set liked=False if coming from Liked List
-                    )
-                    db.add(new_company)
-                    
-                    # Delete from source collection
-                    db.delete(company)
-                    
-                    completed += 1
-                    # Update transfer progress
-                    transfer.completed_companies = completed
-                    db.commit()
+                db.commit()
+                completed += 1
+                
+                # Update transfer progress
+                transfer.completed_companies = completed
+                transfer_progress[transfer_id]["completed"] = completed
+                db.commit()
                     
             except Exception as e:
                 logger.error(f"Error processing company {company_id}: {str(e)}")
@@ -214,6 +248,7 @@ async def transfer_companies(
         
         # Update transfer status
         transfer.status = "completed"
+        transfer_progress[transfer_id]["status"] = "completed"
         db.commit()
         
         return {
@@ -225,6 +260,8 @@ async def transfer_companies(
         
     except Exception as e:
         logger.error(f"Error in transfer_companies: {str(e)}")
+        if transfer_id in transfer_progress:
+            transfer_progress[transfer_id]["status"] = "failed"
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/transfer/{transfer_id}", response_model=TransferProgress)

@@ -62,14 +62,28 @@ class CompanyCollection(Base):
 class CompanyCollectionAssociation(Base):
     __tablename__ = "company_collection_associations"
 
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"))
+    collection_id = Column(UUID(as_uuid=True), ForeignKey("company_collections.id"))
+
     __table_args__ = (
-        UniqueConstraint('company_id', 'collection_id', name='uq_company_collection'),
+        UniqueConstraint('id', name='uq_company_collection'),
     )
     
     created_at: Union[datetime, Column[datetime]] = Column(
         DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False
     )
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"))
-    collection_id = Column(UUID(as_uuid=True), ForeignKey("company_collections.id"))
+
+class Transfer(Base):
+    __tablename__ = "transfers"
+
+    created_at: Union[datetime, Column[datetime]] = Column(
+        DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False
+    )
+    id = Column(String, primary_key=True)  # Using String for UUID
+    source_collection_id = Column(UUID(as_uuid=True), ForeignKey("company_collections.id"))
+    target_collection_id = Column(UUID(as_uuid=True), ForeignKey("company_collections.id"))
+    status = Column(String)  # 'in_progress', 'completed', 'failed'
+    total_companies = Column(Integer)
+    completed_companies = Column(Integer, default=0)
 
