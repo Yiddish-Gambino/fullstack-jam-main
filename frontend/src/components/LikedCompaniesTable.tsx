@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { getCollectionsById, ICompany, ICollection } from "../utils/jam-api";
 import { TransferCompanies } from "./TransferCompanies";
 
-interface CompanyTableProps {
+interface LikedCompaniesTableProps {
     selectedCollectionId: string;
     collections: ICollection[];
 }
 
-const CompanyTable = ({ selectedCollectionId, collections }: CompanyTableProps) => {
+const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompaniesTableProps) => {
     const [response, setResponse] = useState<ICompany[]>([]);
     const [total, setTotal] = useState<number>();
     const [offset, setOffset] = useState<number>(0);
@@ -18,6 +18,13 @@ const CompanyTable = ({ selectedCollectionId, collections }: CompanyTableProps) 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
     const [allCompanyIds, setAllCompanyIds] = useState<number[]>([]);
     const [showTransferDialog, setShowTransferDialog] = useState(false);
+    const [myListId, setMyListId] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Get My List ID
+        const myList = collections.find(c => c.collection_name === "My List");
+        setMyListId(myList?.id || null);
+    }, [collections]);
 
     useEffect(() => {
         getCollectionsById(selectedCollectionId, offset, pageSize).then(
@@ -78,8 +85,10 @@ const CompanyTable = ({ selectedCollectionId, collections }: CompanyTableProps) 
         }
     };
 
-    const handleTransfer = () => {
-        setShowTransferDialog(true);
+    const handleUnlike = () => {
+        if (myListId) {
+            setShowTransferDialog(true);
+        }
     };
 
     const handleTransferDialogClose = () => {
@@ -102,9 +111,10 @@ const CompanyTable = ({ selectedCollectionId, collections }: CompanyTableProps) 
                     <Button
                         variant="contained"
                         color="primary"
-                        onClick={handleTransfer}
+                        onClick={handleUnlike}
+                        disabled={!myListId}
                     >
-                        Transfer Selected ({selectedRows.length})
+                        Unlike Selected ({selectedRows.length})
                     </Button>
                 )}
             </Stack>
@@ -132,15 +142,17 @@ const CompanyTable = ({ selectedCollectionId, collections }: CompanyTableProps) 
                 onRowSelectionModelChange={handleSelectionChange}
                 rowSelectionModel={selectedRows}
             />
-            <TransferCompanies
-                isOpen={showTransferDialog}
-                onClose={handleTransferDialogClose}
-                sourceCollectionId={selectedCollectionId}
-                selectedCompanies={selectedRows as number[]}
-                availableCollections={collections}
-            />
+            {myListId && (
+                <TransferCompanies
+                    isOpen={showTransferDialog}
+                    onClose={handleTransferDialogClose}
+                    sourceCollectionId={selectedCollectionId}
+                    selectedCompanies={selectedRows as number[]}
+                    availableCollections={[{ id: myListId, collection_name: "My List" }]}
+                />
+            )}
         </div>
     );
 };
 
-export default CompanyTable;
+export default LikedCompaniesTable; 
