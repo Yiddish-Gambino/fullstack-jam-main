@@ -1,78 +1,118 @@
-import React from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
-  Button,
-  Typography,
-  CircularProgress,
-} from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Box } from '@mui/material';
+import { useEffect, useState } from 'react';
 
 interface TransferProgressDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  progress: {
-    status: string;
-    completed: number;
-    total: number;
-  } | null;
-  sourceCollectionName?: string;
-  targetCollectionName?: string;
-  isComplete: boolean;
-  error: string | null;
+    isOpen: boolean;
+    onClose: () => void;
+    progress: {
+        status: 'in_progress' | 'completed' | 'failed';
+        total: number;
+    } | null;
+    sourceCollectionName: string;
+    targetCollectionName: string;
+    error: string | null;
 }
 
 export function TransferProgressDialog({
-  isOpen,
-  onClose,
-  progress,
-  sourceCollectionName,
-  targetCollectionName,
-  isComplete,
-  error,
+    isOpen,
+    onClose,
+    progress,
+    sourceCollectionName,
+    targetCollectionName,
+    error
 }: TransferProgressDialogProps) {
-  const isSpecialList = sourceCollectionName === 'Liked Companies List' || 
-                       sourceCollectionName === 'Companies to Ignore List';
+    const [dots, setDots] = useState('');
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  return (
-    <Dialog open={isOpen} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        {isComplete ? 'Transfer Complete' : 'Transferring Companies'}
-      </DialogTitle>
-      <DialogContent>
-        {error && (
-          <Typography color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
-        {progress && (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <CircularProgress
-              variant="determinate"
-              value={(progress.completed / progress.total) * 100}
-              size={60}
-            />
-            <Typography variant="body1" sx={{ mt: 2 }}>
-              {isComplete 
-                ? isSpecialList
-                  ? `Successfully removed ${progress.completed} companies from ${sourceCollectionName}`
-                  : `Successfully transferred ${progress.completed} companies to ${targetCollectionName}`
-                : isSpecialList
-                  ? `Removing ${progress.completed} of ${progress.total} companies from ${sourceCollectionName}`
-                  : `Transferring ${progress.completed} of ${progress.total} companies to ${targetCollectionName}`
-              }
-            </Typography>
-          </div>
-        )}
-      </DialogContent>
-      <DialogActions>
-        {isComplete && (
-          <Button onClick={onClose} variant="contained" color="primary">
-            Confirm
-          </Button>
-        )}
-      </DialogActions>
-    </Dialog>
-  );
+    useEffect(() => {
+        let interval: number;
+        if (isOpen && progress?.status === 'in_progress') {
+            interval = window.setInterval(() => {
+                setDots(prev => prev.length >= 3 ? '' : prev + '.');
+            }, 500);
+
+            // Calculate estimated time based on number of companies (100ms per company)
+            const estimatedTime = progress.total * 100;
+            setTimeLeft(estimatedTime);
+
+            // Start countdown
+            const countdownInterval = window.setInterval(() => {
+                setTimeLeft(prev => {
+                    if (prev === null || prev <= 0) return 0;
+                    return prev - 100;
+                });
+            }, 100);
+
+            return () => {
+                clearInterval(interval);
+                clearInterval(countdownInterval);
+            };
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isOpen, progress]);
+
+    const formatTimeLeft = (ms: number): string => {
+        const seconds = Math.ceil(ms / 1000);
+        if (seconds < 60) {
+            return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        if (remainingSeconds === 0) {
+            return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        }
+        return `${minutes} minute${minutes !== 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds !== 1 ? 's' : ''}`;
+    };
+
+    const getMessage = () => {
+        if (error) return error;
+        if (!progress) return '';
+
+        switch (progress.status) {
+            case 'in_progress':
+                return `Transferring companies from ${sourceCollectionName} to ${targetCollectionName}${dots}`;
+            case 'completed':
+                return `Successfully transferred companies from ${sourceCollectionName} to ${targetCollectionName}`;
+            case 'failed':
+                return `Failed to transfer companies from ${sourceCollectionName} to ${targetCollectionName}`;
+            default:
+                return '';
+        }
+    };
+
+    return (
+        <Dialog 
+            open={isOpen} 
+            onClose={progress?.status === 'in_progress' ? undefined : onClose}
+            maxWidth="sm"
+            fullWidth
+        >
+            <DialogTitle>
+                {progress?.status === 'in_progress' ? 'Transfer in Progress' : 
+                 progress?.status === 'completed' ? 'Transfer Complete' : 
+                 'Transfer Failed'}
+            </DialogTitle>
+            <DialogContent>
+                <Box sx={{ textAlign: 'center', py: 2 }}>
+                    <Typography variant="body1" gutterBottom>
+                        {getMessage()}
+                    </Typography>
+                    {progress?.status === 'in_progress' && timeLeft !== null && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Estimated time remaining: {formatTimeLeft(timeLeft)}
+                        </Typography>
+                    )}
+                </Box>
+            </DialogContent>
+            {progress?.status !== 'in_progress' && (
+                <DialogActions>
+                    <Button onClick={onClose} color="primary">
+                        Confirm
+                    </Button>
+                </DialogActions>
+            )}
+        </Dialog>
+    );
 } 

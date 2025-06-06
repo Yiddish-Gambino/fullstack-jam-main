@@ -146,15 +146,7 @@ async def transfer_companies(
                     logger.warning(f"Company {company_id} not found in source collection")
                     continue
 
-                # # For Liked Companies List, just remove the association
-                # if source_collection.collection_name == "Liked Companies List":
-                #     db.delete(source_association)
-                #     db.commit()
-                #     completed += 1
-                #     transfer.completed_companies = completed
-                #     transfer_progress[transfer_id]["completed"] = completed
-                #     db.commit()
-                #     continue
+                
 
                 # For other collections, handle normal transfer
                 # Check if company already exists in target collection
@@ -168,6 +160,17 @@ async def transfer_companies(
                     company_id=company_id,
                     collection_id=request.targetCollectionId
                 )
+
+                ignored = db.query(database.CompanyCollectionAssociation.company_id).filter(
+                    database.CompanyCollectionAssociation.collection_id == db.query(database.CompanyCollection.id).filter(
+                    database.CompanyCollection.collection_name == "Companies to Ignore List"
+                ).scalar()).all()
+
+                ignored_ids = [row[0] for row in ignored]
+        
+                if company_id in ignored_ids:
+                    logger.info(f"Company {company_id} is in Ignored List, skipping add")
+                    continue
 
                 if target_association:
                     logger.info(f"Company {company_id} already exists in target collection, skipping add")
