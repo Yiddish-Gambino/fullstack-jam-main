@@ -10,9 +10,10 @@ import {
   Select,
   MenuItem,
   Typography,
-  CircularProgress,
 } from '@mui/material';
+import { SelectChangeEvent } from '@mui/material';
 import { transferCompanies, getTransferProgress } from '../utils/jam-api';
+import { TransferProgressDialog } from './TransferProgressDialog';
 
 interface TransferCompaniesProps {
   isOpen: boolean;
@@ -41,6 +42,8 @@ export function TransferCompanies({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [targetCollectionName, setTargetCollectionName] = useState<string>('');
+  const [sourceCollectionName, setSourceCollectionName] = useState<string>('');
 
   const handleTransfer = async () => {
     if (!targetCollectionId) {
@@ -52,6 +55,12 @@ export function TransferCompanies({
       setIsTransferring(true);
       setError(null);
       setIsComplete(false);
+      setTransferProgress({
+        status: 'in_progress',
+        completed: 0,
+        total: selectedCompanies.length
+      });
+
       const response = await transferCompanies(
         sourceCollectionId,
         targetCollectionId,
@@ -66,7 +75,6 @@ export function TransferCompanies({
 
           if (progress.status === 'completed') {
             setIsComplete(true);
-            setIsTransferring(false);
           } else if (progress.status === 'failed') {
             setError('Transfer failed');
             setIsTransferring(false);
@@ -99,68 +107,78 @@ export function TransferCompanies({
     }
   };
 
+  const handleTransferDialogClose = () => {
+    setIsTransferring(false);
+    setTransferProgress(null);
+    setError(null);
+    setIsComplete(false);
+    setTargetCollectionId('');
+    onClose();
+  };
+
+  const handleTargetChange = (e: SelectChangeEvent<string>) => {
+    const selectedCollection = availableCollections.find(c => c.id === e.target.value);
+    setTargetCollectionId(e.target.value);
+    setTargetCollectionName(selectedCollection?.collection_name || '');
+  };
+
+  // Get source collection name
+  React.useEffect(() => {
+    const sourceCollection = availableCollections.find(c => c.id === sourceCollectionId);
+    if (sourceCollection) {
+      setSourceCollectionName(sourceCollection.collection_name);
+    }
+  }, [sourceCollectionId, availableCollections]);
+
   return (
-    <Dialog open={isOpen} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Transfer Companies</DialogTitle>
-      <DialogContent>
-        {error && (
-          <Typography color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
-        {isComplete ? (
-          <Typography variant="body1" sx={{ mt: 2, color: 'success.main' }}>
-            Transfer completed successfully!
-          </Typography>
-        ) : (
-          <>
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Target Collection</InputLabel>
-              <Select
-                value={targetCollectionId}
-                onChange={(e) => setTargetCollectionId(e.target.value)}
-                disabled={isTransferring}
-                label="Target Collection"
-              >
-                {availableCollections
-                  .filter((collection) => collection.id !== sourceCollectionId)
-                  .map((collection) => (
-                    <MenuItem key={collection.id} value={collection.id}>
-                      {collection.collection_name}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-            {transferProgress && (
-              <div style={{ textAlign: 'center', padding: '20px' }}>
-                <CircularProgress
-                  variant="determinate"
-                  value={(transferProgress.completed / transferProgress.total) * 100}
-                  size={60}
-                />
-                <Typography variant="body1" sx={{ mt: 2 }}>
-                  Transferring companies... {transferProgress.completed} of {transferProgress.total}
-                </Typography>
-              </div>
-            )}
-          </>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} disabled={isTransferring}>
-          {isComplete ? 'Close' : 'Cancel'}
-        </Button>
-        {!isComplete && (
+    <>
+      <Dialog open={isOpen && !isTransferring} onClose={handleClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Transfer Companies</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {error}
+            </Typography>
+          )}
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Target Collection</InputLabel>
+            <Select
+              value={targetCollectionId}
+              onChange={handleTargetChange}
+              label="Target Collection"
+            >
+              {availableCollections
+                .filter((collection) => collection.id !== sourceCollectionId)
+                .map((collection) => (
+                  <MenuItem key={collection.id} value={collection.id}>
+                    {collection.collection_name}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Cancel</Button>
           <Button
             onClick={handleTransfer}
-            disabled={!targetCollectionId || isTransferring}
+            disabled={!targetCollectionId}
             variant="contained"
             color="primary"
           >
-            {isTransferring ? 'Transferring...' : 'Transfer'}
+            Transfer
           </Button>
-        )}
-      </DialogActions>
-    </Dialog>
+        </DialogActions>
+      </Dialog>
+
+      <TransferProgressDialog
+        isOpen={isTransferring}
+        onClose={handleTransferDialogClose}
+        progress={transferProgress}
+        sourceCollectionName={sourceCollectionName}
+        targetCollectionName={targetCollectionName}
+        isComplete={isComplete}
+        error={error}
+      />
+    </>
   );
 } 

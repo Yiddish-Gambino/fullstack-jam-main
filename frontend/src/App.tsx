@@ -5,6 +5,7 @@ import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { useEffect, useState } from "react";
 import CompanyTable from "./components/CompanyTable";
 import LikedCompaniesTable from "./components/LikedCompaniesTable";
+import IgnoreCompaniesTable from "./components/IgnoreCompaniesTable";
 import { getCollectionsMetadata } from "./utils/jam-api";
 import useApi from "./utils/useApi";
 
@@ -18,6 +19,7 @@ function App() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
   const { data: collectionResponse } = useApi(() => getCollectionsMetadata());
   const [isLikedList, setIsLikedList] = useState(false);
+  const [isIgnoreList, setIsIgnoreList] = useState(false);
 
   useEffect(() => {
     setSelectedCollectionId(collectionResponse?.[0]?.id);
@@ -26,9 +28,11 @@ function App() {
   useEffect(() => {
     if (selectedCollectionId) {
       window.history.pushState({}, "", `?collection=${selectedCollectionId}`);
-      // Check if we're in the Liked Companies List
+      // Check if we're in the Liked Companies List or Companies to Ignore List
       const likedList = collectionResponse?.find(c => c.collection_name === "Liked Companies List");
+      const ignoreList = collectionResponse?.find(c => c.collection_name === "Companies to Ignore List");
       setIsLikedList(likedList?.id === selectedCollectionId);
+      setIsIgnoreList(ignoreList?.id === selectedCollectionId);
     }
   }, [selectedCollectionId, collectionResponse]);
 
@@ -68,6 +72,11 @@ function App() {
               isLikedList ? (
                 <LikedCompaniesTable 
                   selectedCollectionId={selectedCollectionId} 
+                  collections={collectionResponse}
+                />
+              ) : isIgnoreList ? (
+                <IgnoreCompaniesTable
+                  selectedCollectionId={selectedCollectionId}
                   collections={collectionResponse}
                 />
               ) : (

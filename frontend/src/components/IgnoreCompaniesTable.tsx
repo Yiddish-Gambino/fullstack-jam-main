@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { getCollectionsById, ICompany, ICollection, transferCompanies, getTransferProgress } from "../utils/jam-api";
 import { TransferProgressDialog } from "./TransferProgressDialog";
 
-interface LikedCompaniesTableProps {
+interface IgnoreCompaniesTableProps {
     selectedCollectionId: string;
     collections: ICollection[];
 }
 
-const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompaniesTableProps) => {
+const IgnoreCompaniesTable = ({ selectedCollectionId, collections }: IgnoreCompaniesTableProps) => {
     const [response, setResponse] = useState<ICompany[]>([]);
     const [total, setTotal] = useState<number>();
     const [offset, setOffset] = useState<number>(0);
@@ -17,7 +17,6 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
     const [isSelectingAll, setIsSelectingAll] = useState(false);
     const [allCompanyIds, setAllCompanyIds] = useState<number[]>([]);
-    const [myListId, setMyListId] = useState<string | null>(null);
     const [isTransferring, setIsTransferring] = useState(false);
     const [transferProgress, setTransferProgress] = useState<{
         status: string;
@@ -28,10 +27,6 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
     const [isComplete, setIsComplete] = useState(false);
 
     useEffect(() => {
-        // Get My List ID
-        const myList = collections.find(c => c.collection_name === "My List");
-        setMyListId(myList?.id || null);
-
         // Get source collection name
         const sourceCollection = collections.find(c => c.id === selectedCollectionId);
         setSourceCollectionName(sourceCollection?.collection_name || "");
@@ -96,8 +91,8 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
         }
     };
 
-    const handleUnlike = async () => {
-        if (myListId && selectedRows.length > 0) {
+    const handleRemove = async () => {
+        if (selectedRows.length > 0) {
             try {
                 setIsTransferring(true);
                 setIsComplete(false);
@@ -109,7 +104,7 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
 
                 const response = await transferCompanies(
                     selectedCollectionId,
-                    myListId,
+                    selectedCollectionId, // Use the same collection ID to just remove the companies
                     selectedRows as number[]
                 );
 
@@ -138,6 +133,7 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
                                 }
                             );
                             setSelectedRows([]);
+                            setAllCompanyIds([]);
                         } else if (progress.status === 'failed') {
                             console.error('Transfer failed');
                             setIsTransferring(false);
@@ -181,10 +177,10 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
                     <Button
                         variant="contained"
                         color="primary"
-                        onClick={handleUnlike}
+                        onClick={handleRemove}
                         disabled={isTransferring}
                     >
-                        Unlike Selected ({selectedRows.length})
+                        Remove Selected ({selectedRows.length})
                     </Button>
                 )}
             </Stack>
@@ -224,4 +220,4 @@ const LikedCompaniesTable = ({ selectedCollectionId, collections }: LikedCompani
     );
 };
 
-export default LikedCompaniesTable; 
+export default IgnoreCompaniesTable; 

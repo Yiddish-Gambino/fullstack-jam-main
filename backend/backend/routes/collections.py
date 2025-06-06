@@ -43,6 +43,7 @@ class TransferProgress(BaseModel):
     status: str
     completed: int
     total: int
+    transferId: str
 
 @router.get("", response_model=list[CompanyCollectionMetadata])
 def get_all_collection_metadata(
@@ -94,75 +95,6 @@ def get_company_collection_by_id(
         total=total_count,
     )
 
-def process_transfer(
-    transfer_id: str,
-    source_collection_id: uuid.UUID,
-    target_collection_id: uuid.UUID,
-    company_ids: list[int],
-    db: Session,
-):
-    try:
-        total = len(company_ids)
-        completed = 0
-
-        # Update progress
-        transfer_progress[transfer_id] = {
-            "status": "in_progress",
-            "completed": completed,
-            "total": total,
-        }
-
-        # Process each company
-        for company_id in company_ids:
-            # Check if company exists in source collection
-            source_association = (
-                db.query(database.CompanyCollectionAssociation)
-                .filter(database.CompanyCollectionAssociation.company_id == company_id)
-                .filter(database.CompanyCollectionAssociation.collection_id == source_collection_id)
-                .first()
-            )
-
-            # Check if company exists in target collection
-            target_association = (
-                db.query(database.CompanyCollectionAssociation)
-                .filter(database.CompanyCollectionAssociation.company_id == company_id)
-                .filter(database.CompanyCollectionAssociation.collection_id == target_collection_id)
-                .first()
-            )
-
-            if target_association:
-                logger.info(f"Company {company_id} already exists in target collection")
-                continue
-
-            logger.info(f"Source association: {source_association}")
-            print(f"Source association: {source_association}")
-
-            if source_association:
-                logger.info(f"Company {company_id} exists in source collection")
-                # Create new association in target collection
-                new_association = database.CompanyCollectionAssociation(
-                    company_id=company_id,
-                    collection_id=target_collection_id,
-                )
-                db.add(new_association)
-
-                if source_association.collection_id != db.query(database.CompanyCollection).filter(database.CompanyCollection.collection_name == "My List").first().id:
-                # Remove from source collection
-                    db.delete(source_association)
-                
-                db.commit()
-
-            completed += 1
-            transfer_progress[transfer_id]["completed"] = completed
-
-        # Mark transfer as completed
-        transfer_progress[transfer_id]["status"] = "completed"
-
-    except Exception as e:
-        # Mark transfer as failed
-        transfer_progress[transfer_id]["status"] = "failed"
-        raise e
-
 @router.post("/transfer", response_model=TransferProgress)
 async def transfer_companies(
     request: TransferRequest,
@@ -196,7 +128,8 @@ async def transfer_companies(
         transfer_progress[transfer_id] = {
             "status": "in_progress",
             "completed": 0,
-            "total": len(request.companyIds)
+            "total": len(request.companyIds),
+            "transferId": transfer_id
         }
         
         # Process each company
@@ -213,26 +146,39 @@ async def transfer_companies(
                     logger.warning(f"Company {company_id} not found in source collection")
                     continue
 
+                # # For Liked Companies List, just remove the association
+                # if source_collection.collection_name == "Liked Companies List":
+                #     db.delete(source_association)
+                #     db.commit()
+                #     completed += 1
+                #     transfer.completed_companies = completed
+                #     transfer_progress[transfer_id]["completed"] = completed
+                #     db.commit()
+                #     continue
+
+                # For other collections, handle normal transfer
                 # Check if company already exists in target collection
                 target_association = db.query(database.CompanyCollectionAssociation).filter(
                     database.CompanyCollectionAssociation.company_id == company_id,
                     database.CompanyCollectionAssociation.collection_id == request.targetCollectionId
                 ).first()
 
-                # Only delete from source if it's not the My List
-                if source_collection.collection_name != "My List":
-                    db.delete(source_association)
-
-                if target_association:
-                    logger.info(f"Company {company_id} already exists in target collection")
-                    continue
-
-                # Create new association in target collection
+                 # Create new association in target collection
                 new_association = database.CompanyCollectionAssociation(
                     company_id=company_id,
                     collection_id=request.targetCollectionId
                 )
-                db.add(new_association)
+
+                if target_association:
+                    logger.info(f"Company {company_id} already exists in target collection, skipping add")
+                else:
+                    db.add(new_association)
+
+               
+                
+                # Only delete from source if it's not the My List
+                if source_collection.collection_name != "My List":
+                    db.delete(source_association)
                 
                 db.commit()
                 completed += 1
